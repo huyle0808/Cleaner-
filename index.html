@@ -1,0 +1,36 @@
+<!DOCTYPE html><html>
+<head>
+<meta charset="UTF-8">
+<title>Storage Cleaner AI</title>
+</head>
+<body><h1>Storage Cleaner AI</h1><input type="file" id="imageInput" multiple accept="image/*"><button onclick="scanImages()">Quét ảnh</button>
+
+<div id="result"></div><script>
+
+function formatBytes(bytes){
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+}
+
+function scanImages(){
+
+    const files = document.getElementById("imageInput").files;
+
+    if(files.length === 0){
+        alert("Chưa chọn ảnh");
+        return;
+    }
+
+    let totalSize = 0;
+
+    for(let file of files){
+        totalSize += file.size;
+    }
+
+    document.getElementById("result").innerHTML =
+        "<h2>Kết quả</h2>" +
+        "<p>Số ảnh: " + files.length + "</p>" +
+        "<p>Tổng dung lượng: " + formatBytes(totalSize) + "</p>";
+}
+
+</script></body>
+</html>
