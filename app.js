@@ -1,72 +1,82 @@
+
 function formatBytes(bytes){
-return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
 }
 
-function scanImages(){
+async function sha256(file){
 
-    const files = Array.from(
-        document.getElementById("imageInput").files
-    );
+    const buffer = await file.arrayBuffer();
+
+    const hashBuffer =
+        await crypto.subtle.digest(
+            "SHA-256",
+            buffer
+        );
+
+    const hashArray =
+        Array.from(new Uint8Array(hashBuffer));
+
+    return hashArray
+        .map(b => b.toString(16).padStart(2,"0"))
+        .join("");
+}
+
+async function scanImages(){
+
+    const files =
+        document.getElementById("imageInput").files;
 
     if(files.length === 0){
         alert("Chưa chọn ảnh");
         return;
     }
 
-    let totalSize = 0;
+    const hashMap = {};
+    let duplicateFiles = [];
 
-    const map = {};
-    const duplicates = [];
+    for(const file of files){
 
-    files.forEach(file => {
+        const hash = await sha256(file);
 
-        totalSize += file.size;
-
-        const key = file.name + "_" + file.size;
-
-        if(map[key]){
-            duplicates.push(file);
-        }else{
-            map[key] = file;
+        if(!hashMap[hash]){
+            hashMap[hash] = [];
         }
 
-    });
-
-    let html =
-        "<h2>Kết quả</h2>" +
-        "<p>Tổng số ảnh: " + files.length + "</p>" +
-        "<p>Tổng dung lượng: " + formatBytes(totalSize) + "</p>" +
-        "<p>Ảnh trùng: " + duplicates.length + "</p>";
-
-    if(duplicates.length > 0){
-
-        html += "<h3>Danh sách ảnh trùng</h3><ul>";
-
-        duplicates.forEach(file => {
-            html +=
-                "<li>" +
-                file.name +
-                " (" +
-                formatBytes(file.size) +
-                ")" +
-                "</li>";
-        });
-
-        html += "</ul>";
-
-        if(confirm(
-            "Tìm thấy " +
-            duplicates.length +
-            " ảnh trùng.\nBạn có muốn xóa khỏi danh sách không?"
-        )){
-            alert(
-                "Đã loại bỏ " +
-                duplicates.length +
-                " ảnh trùng khỏi danh sách xử lý."
-            );
-        }
-
+        hashMap[hash].push(file);
     }
 
-    document.getElementById("result").innerHTML = html;
+    for(const hash in hashMap){
+
+        if(hashMap[hash].length > 1){
+
+            for(let i = 1; i < hashMap[hash].length; i++){
+                duplicateFiles.push(hashMap[hash][i]);
+            }
+        }
+    }
+
+    document.getElementById("result").innerHTML =
+        "<h2>Kết quả</h2>" +
+        "<p>Tổng ảnh: " + files.length + "</p>" +
+        "<p>Ảnh trùng: " + duplicateFiles.length + "</p>";
+
+    if(duplicateFiles.length > 0){
+
+        const confirmDelete = confirm(
+            "Phát hiện " +
+            duplicateFiles.length +
+            " ảnh trùng.\n\nBạn có muốn xóa không?"
+        );
+
+        if(confirmDelete){
+
+            alert(
+                "Đã chọn xóa " +
+                duplicateFiles.length +
+                " ảnh trùng"
+            );
+        }
+    }
 }
+
+</script>
