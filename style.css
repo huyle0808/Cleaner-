@@ -55,3 +55,15 @@ button:disabled {
     border: 1px solid #ffeeba;
     border-radius: 8px;
 }
+ul {
+    padding-left: 20px;
+}
+
+li {
+    margin-bottom: 8px;
+}
+
+h3 {
+    margin-top: 20px;
+    color: #1976d2;
+}
