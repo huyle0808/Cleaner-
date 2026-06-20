@@ -2,7 +2,7 @@ const imageInput = document.getElementById("imageInput");
 const result = document.getElementById("result");
 const loading = document.getElementById("loading");
 const scanBtn = document.getElementById("scanBtn")
-
+scanBtn.addEventListener("click", scanImages);
 function formatBytes(bytes) {
 
     if (bytes < 1024) return bytes + " B";
