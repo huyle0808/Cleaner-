@@ -1,7 +1,7 @@
 const imageInput = document.getElementById("imageInput");
 const result = document.getElementById("result");
 const loading = document.getElementById("loading");
-const scanBtn = document.getElementById("scanBtn");
+const scanBtn = document.getElementById("scanBtn")
 
 function formatBytes(bytes) {
 
@@ -11,125 +11,168 @@ function formatBytes(bytes) {
         return (bytes / 1024).toFixed(2) + " KB";
     }
 
-    if (bytes < 1024 * 1024 * 1024) {
-        return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+}
+
+function hammingDistance(a, b) {
+
+    let distance = 0;
+
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) distance++;
     }
 
-    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+    return distance;
 }
 
-async function sha256(file) {
+async function getImageHash(file) {
 
-    const buffer = await file.arrayBuffer();
+    return new Promise((resolve, reject) => {
 
-    const hashBuffer = await crypto.subtle.digest(
-        "SHA-256",
-        buffer
-    );
+        const reader = new FileReader();
 
-    return Array
-        .from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, "0"))
-        .join("");
+        reader.onload = async function () {
+
+            try {
+
+                const hash = await imghash.hash(
+                    reader.result,
+                    16,
+                    "phash"
+                );
+
+                resolve(hash);
+
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        reader.onerror = reject;
+
+        reader.readAsDataURL(file);
+    });
 }
-
-scanBtn.addEventListener("click", scanImages);
 
 async function scanImages() {
 
-    const files = [...imageInput.files];
+    const files = [...document
+        .getElementById("imageInput")
+        .files];
 
     if (files.length === 0) {
-        alert("Vui lòng chọn ảnh.");
+        alert("Chưa chọn ảnh");
         return;
     }
 
-    scanBtn.disabled = true;
-    loading.innerHTML = "<p>Đang quét...</p>";
-    result.innerHTML = "";
+    const result = document.getElementById("result");
 
-    const hashMap = new Map();
+    result.innerHTML = "<p>Đang phân tích ảnh...</p>";
 
-    let totalSize = 0;
+    const imageData = [];
 
     for (let i = 0; i < files.length; i++) {
 
-        const file = files[i];
+        result.innerHTML =
+            `<p>Đang xử lý ${i + 1}/${files.length}</p>`;
 
-        totalSize += file.size;
+        const hash = await getImageHash(files[i]);
 
-        loading.innerHTML =
-            `<p>Đang quét ${i + 1}/${files.length}</p>`;
-
-        const hash = await sha256(file);
-
-        if (!hashMap.has(hash)) {
-            hashMap.set(hash, []);
-        }
-
-        hashMap.get(hash).push(file);
+        imageData.push({
+            file: files[i],
+            hash
+        });
     }
 
-    const duplicateFiles = [];
-    let duplicateSize = 0;
+    const duplicateGroups = [];
+    const used = new Set();
 
-    hashMap.forEach(group => {
+    const MAX_DISTANCE = 8;
 
-        if (group.length > 1) {
+    for (let i = 0; i < imageData.length; i++) {
 
-            for (let i = 1; i < group.length; i++) {
+        if (used.has(i)) continue;
 
-                duplicateFiles.push(group[i]);
-                duplicateSize += group[i].size;
+        const group = [imageData[i]];
+
+        for (let j = i + 1; j < imageData.length; j++) {
+
+            if (used.has(j)) continue;
+
+            const distance = hammingDistance(
+                imageData[i].hash,
+                imageData[j].hash
+            );
+
+            if (distance <= MAX_DISTANCE) {
+
+                group.push(imageData[j]);
+
+                used.add(j);
             }
         }
-    });
+
+        if (group.length > 1) {
+            duplicateGroups.push(group);
+        }
+    }
+
+    let duplicateCount = 0;
+    let duplicateSize = 0;
 
     let html = `
         <h2>Kết quả</h2>
+        <p>Tổng ảnh: ${files.length}</p>
+    `;
 
-        <p><strong>Tổng ảnh:</strong> ${files.length}</p>
+    duplicateGroups.forEach((group, index) => {
 
-        <p><strong>Tổng dung lượng:</strong>
-        ${formatBytes(totalSize)}</p>
+        html += `<h3>Nhóm ${index + 1}</h3><ul>`;
 
-        <p><strong>Ảnh trùng:</strong>
-        ${duplicateFiles.length}</p>
+        group.forEach((item, idx) => {
+
+            html += `
+                <li>
+                    ${item.file.name}
+                    (${formatBytes(item.file.size)})
+                    ${idx === 0 ? " ⭐ Giữ lại" : ""}
+                </li>
+            `;
+
+            if (idx > 0) {
+                duplicateCount++;
+                duplicateSize += item.file.size;
+            }
+        });
+
+        html += "</ul>";
+    });
+
+    html += `
+        <hr>
+
+        <p><strong>Ảnh giống nhau:</strong>
+        ${duplicateCount}</p>
 
         <p><strong>Có thể giải phóng:</strong>
         ${formatBytes(duplicateSize)}</p>
     `;
 
-    if (duplicateFiles.length > 0) {
+    if (duplicateCount > 0) {
 
         html += `
-            <h3>Danh sách ảnh trùng</h3>
-            <ul class="duplicate-list">
-        `;
+            <div style="
+                padding:12px;
+                background:#fff3cd;
+                border-radius:8px;
+                margin-top:20px;
+            ">
+                ⚠️ Trình duyệt không thể xóa ảnh trực tiếp.
 
-        duplicateFiles.forEach(file => {
-
-            html += `
-                <li>
-                    <strong>${file.name}</strong><br>
-                    ${formatBytes(file.size)}
-                </li>
-            `;
-        });
-
-        html += "</ul>";
-
-        html += `
-            <div class="warning">
-                ⚠️ Trình duyệt không thể xóa file trực tiếp.
-
-                Hãy mở thư viện ảnh và xóa các file trên.
+                Hãy xóa thủ công các ảnh không có dấu ⭐.
             </div>
         `;
     }
 
     result.innerHTML = html;
-
-    loading.innerHTML = "";
-    scanBtn.disabled = false;
 }
