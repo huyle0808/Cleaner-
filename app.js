@@ -89,90 +89,259 @@ async function scanImages() {
 
     const MAX_DISTANCE = 8;
 
-    for (let i = 0; i < imageData.length; i++) {
+    const imageInput = document.getElementById("imageInput");
+const result = document.getElementById("result");
+const scanBtn = document.getElementById("scanBtn");
 
-        if (used.has(i)) continue;
+scanBtn.addEventListener("click", scanImages);
 
-        const group = [imageData[i]];
+function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + " B";
 
-        for (let j = i + 1; j < imageData.length; j++) {
-
-            if (used.has(j)) continue;
-
-            const distance = hammingDistance(
-                imageData[i].hash,
-                imageData[j].hash
-            );
-
-            if (distance <= MAX_DISTANCE) {
-
-                group.push(imageData[j]);
-
-                used.add(j);
-            }
-        }
-
-        if (group.length > 1) {
-            duplicateGroups.push(group);
-        }
+    if (bytes < 1024 * 1024) {
+        return (bytes / 1024).toFixed(2) + " KB";
     }
 
-    let duplicateCount = 0;
-    let duplicateSize = 0;
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+}
 
-    let html = `
-        <h2>Kết quả</h2>
-        <p>Tổng ảnh: ${files.length}</p>
-    `;
+function hammingDistance(a, b) {
+    let distance = 0;
 
-    duplicateGroups.forEach((group, index) => {
+    const length = Math.min(a.length, b.length);
 
-        html += `<h3>Nhóm ${index + 1}</h3><ul>`;
+    for (let i = 0; i < length; i++) {
+        if (a[i] !== b[i]) distance++;
+    }
 
-        group.forEach((item, idx) => {
+    return distance;
+}
 
-            html += `
-                <li>
-                    ${item.file.name}
-                    (${formatBytes(item.file.size)})
-                    ${idx === 0 ? " ⭐ Giữ lại" : ""}
-                </li>
+async function getImageHash(file) {
+    return new Promise((resolve, reject) => {
+
+        const reader = new FileReader();
+
+        reader.onload = async () => {
+            try {
+                console.log("Đang hash:", file.name);
+
+                const hash = await imghash.hash(
+                    reader.result,
+                    16,
+                    "phash"
+                );
+
+                console.log("Hash xong:", file.name, hash);
+
+                resolve(hash);
+
+            } catch (error) {
+                reject(error);
+            }
+        };
+
+        reader.onerror = () => {
+            reject(new Error("Không thể đọc file"));
+        };
+
+        reader.readAsDataURL(file);
+    });
+}
+
+async function scanImages() {
+
+    try {
+
+        if (!window.imghash) {
+            result.innerHTML = `
+                <p style="color:red">
+                    Không tải được thư viện imghash.
+                </p>
+            `;
+            return;
+        }
+
+        const files = [...imageInput.files];
+
+        if (files.length === 0) {
+            alert("Vui lòng chọn ảnh.");
+            return;
+        }
+
+        scanBtn.disabled = true;
+
+        result.innerHTML = `
+            <p>Đang chuẩn bị quét ${files.length} ảnh...</p>
+        `;
+
+        const imageData = [];
+
+        for (let i = 0; i < files.length; i++) {
+
+            const file = files[i];
+
+            result.innerHTML = `
+                <p>Đang xử lý ${i + 1}/${files.length}</p>
+                <p>${file.name}</p>
             `;
 
-            if (idx > 0) {
-                duplicateCount++;
-                duplicateSize += item.file.size;
+            try {
+
+                if (!file.type.startsWith("image/")) {
+                    console.warn("Bỏ qua:", file.name);
+                    continue;
+                }
+
+                if (file.size > 15 * 1024 * 1024) {
+                    console.warn("Ảnh quá lớn:", file.name);
+
+                    result.innerHTML += `
+                        <p style="color:orange">
+                            Bỏ qua ảnh quá lớn:
+                            ${file.name}
+                        </p>
+                    `;
+
+                    continue;
+                }
+
+                const hash = await getImageHash(file);
+
+                imageData.push({
+                    file,
+                    hash
+                });
+
+            } catch (error) {
+
+                console.error(
+                    "Lỗi xử lý ảnh:",
+                    file.name,
+                    error
+                );
+
+                result.innerHTML += `
+                    <p style="color:red">
+                        Không thể xử lý:
+                        ${file.name}
+                    </p>
+                `;
             }
-        });
+        }
 
-        html += "</ul>";
-    });
+        const duplicateGroups = [];
+        const used = new Set();
 
-    html += `
-        <hr>
+        const MAX_DISTANCE = 8;
 
-        <p><strong>Ảnh giống nhau:</strong>
-        ${duplicateCount}</p>
+        for (let i = 0; i < imageData.length; i++) {
 
-        <p><strong>Có thể giải phóng:</strong>
-        ${formatBytes(duplicateSize)}</p>
-    `;
+            if (used.has(i)) continue;
 
-    if (duplicateCount > 0) {
+            const group = [imageData[i]];
+
+            for (let j = i + 1; j < imageData.length; j++) {
+
+                if (used.has(j)) continue;
+
+                const distance = hammingDistance(
+                    imageData[i].hash,
+                    imageData[j].hash
+                );
+
+                if (distance <= MAX_DISTANCE) {
+
+                    group.push(imageData[j]);
+
+                    used.add(j);
+                }
+            }
+
+            if (group.length > 1) {
+                duplicateGroups.push(group);
+            }
+        }
+
+        let duplicateCount = 0;
+        let duplicateSize = 0;
+
+        let html = `
+            <h2>Kết quả</h2>
+
+            <p><strong>Tổng ảnh:</strong> ${files.length}</p>
+
+            <p><strong>Đã phân tích:</strong>
+            ${imageData.length}</p>
+        `;
+
+        if (duplicateGroups.length === 0) {
+
+            html += `
+                <p>Không phát hiện ảnh trùng lặp.</p>
+            `;
+
+        } else {
+
+            duplicateGroups.forEach((group, index) => {
+
+                html += `<h3>Nhóm ${index + 1}</h3><ul>`;
+
+                group.forEach((item, idx) => {
+
+                    html += `
+                        <li>
+                            ${item.file.name}
+                            (${formatBytes(item.file.size)})
+                            ${idx === 0 ? "⭐ Giữ lại" : ""}
+                        </li>
+                    `;
+
+                    if (idx > 0) {
+                        duplicateCount++;
+                        duplicateSize += item.file.size;
+                    }
+                });
+
+                html += "</ul>";
+            });
+        }
 
         html += `
-            <div style="
-                padding:12px;
-                background:#fff3cd;
-                border-radius:8px;
-                margin-top:20px;
-            ">
-                ⚠️ Trình duyệt không thể xóa ảnh trực tiếp.
+            <hr>
 
-                Hãy xóa thủ công các ảnh không có dấu ⭐.
-            </div>
+            <p><strong>Ảnh trùng:</strong>
+            ${duplicateCount}</p>
+
+            <p><strong>Có thể giải phóng:</strong>
+            ${formatBytes(duplicateSize)}</p>
         `;
-    }
 
-    result.innerHTML = html;
+        if (duplicateCount > 0) {
+
+            html += `
+                <div class="warning">
+                    ⚠️ Trình duyệt không thể xóa ảnh trực tiếp.
+
+                    Hãy xóa thủ công các ảnh không có dấu ⭐.
+                </div>
+            `;
+        }
+
+        result.innerHTML = html;
+
+    } catch (error) {
+
+        console.error(error);
+
+        result.innerHTML = `
+            <p style="color:red">
+                Đã xảy ra lỗi: ${error.message}
+            </p>
+        `;
+
+    } finally {
+
+        scanBtn.disabled = false;
+    }
 }
